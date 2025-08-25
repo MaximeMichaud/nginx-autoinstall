@@ -6,6 +6,30 @@ if [[ $EUID -ne 0 ]]; then
 	exit 1
 fi
 
+# Check Ubuntu/Debian version compatibility
+if [[ -f /etc/os-release ]]; then
+	. /etc/os-release
+	if [[ "$ID" == "ubuntu" ]]; then
+		VERSION_ID_MAJOR=$(echo "$VERSION_ID" | cut -d. -f1)
+		if [[ $VERSION_ID_MAJOR -lt 22 ]]; then
+			echo "Error: Ubuntu 22.04 or later is required. You are running Ubuntu $VERSION_ID"
+			echo "Ubuntu 20.04 has reached end of standard support. Please upgrade to Ubuntu 22.04 LTS or later."
+			exit 1
+		fi
+	elif [[ "$ID" == "debian" ]]; then
+		if [[ $VERSION_ID -lt 11 ]]; then
+			echo "Error: Debian 11 or later is required. You are running Debian $VERSION_ID"
+			exit 1
+		fi
+	else
+		echo "Warning: This script is only tested on Ubuntu 22.04+ and Debian 11+"
+		read -rp "Do you want to continue anyway? [y/n]: " -e -i n CONTINUE_ANYWAY
+		if [[ $CONTINUE_ANYWAY != "y" ]]; then
+			exit 1
+		fi
+	fi
+fi
+
 # Define versions
 NGINX_MAINLINE_VER=${NGINX_MAINLINE_VER:-1.29.0}
 NGINX_STABLE_VER=${NGINX_STABLE_VER:-1.28.0}
