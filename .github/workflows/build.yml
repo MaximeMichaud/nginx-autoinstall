@@ -33,8 +33,6 @@ jobs:
           # FULL assumes HTTP/3 which will use BoringSSL
           # So we exclude these
           - install_type: FULL
-            ssl: OPENSSL
-          - install_type: FULL
             ssl: LIBRESSL
       fail-fast: false
     steps:
