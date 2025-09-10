@@ -799,7 +799,7 @@ case $OPTION in
 
 	# use zlib-ng instead of zlib
 	if [[ $ZLIBNG == 'y' ]]; then
-		wget https://raw.githubusercontent.com/vpday/nginx-autoinstall/refs/heads/master/patches/nginx_zlib-ng.patch -O nginx_zlib-ng.patch
+		wget https://raw.githubusercontent.com/maximemichaud/nginx-autoinstall/refs/heads/master/patches/nginx_zlib-ng.patch -O nginx_zlib-ng.patch
 		patch -p1 <nginx_zlib-ng.patch
 	fi
 
