@@ -46,6 +46,8 @@ LUA_RESTYLRUCACHE_VER=${LUA_RESTYLRUCACHE_VER:-0.14}
 NGINX_DEV_KIT=${NGINX_DEV_KIT:-0.3.3}
 HTTPREDIS_VER=${HTTPREDIS_VER:-0.3.9}
 NGXECHO_VER=${NGXECHO_VER:-0.63}
+ZLIBNG_VER=${ZLIBNG_VER:-2.2.4}
+PCRE2_VER=${PCRE2_VER:-10.45}
 # Define options
 NGINX_OPTIONS=${NGINX_OPTIONS:-"
 	--prefix=/etc/nginx \
@@ -60,11 +62,14 @@ NGINX_OPTIONS=${NGINX_OPTIONS:-"
 	--http-fastcgi-temp-path=/var/cache/nginx/fastcgi_temp \
 	--user=nginx \
 	--group=nginx \
+	--with-cc-opt=-O2 \
 	--with-cc-opt=-Wno-deprecated-declarations \
 	--with-cc-opt=-Wno-ignored-qualifiers"}
 # Define modules
 NGINX_MODULES=${NGINX_MODULES:-"--with-threads \
 	--with-file-aio \
+	--with-poll_module \
+	--with-select_module \
 	--with-http_ssl_module \
 	--with-http_v2_module \
 	--with-http_mp4_module \
@@ -72,7 +77,9 @@ NGINX_MODULES=${NGINX_MODULES:-"--with-threads \
 	--with-http_slice_module \
 	--with-http_stub_status_module \
 	--with-http_realip_module \
-	--with-http_sub_module"}
+	--with-http_sub_module \
+	--with-http_degradation_module \
+	--with-http_secure_link_module"}
 
 # Define installation parameters for headless install (fallback if unspecifed)
 if [[ $HEADLESS == "y" ]]; then
@@ -100,6 +107,9 @@ if [[ $HEADLESS == "y" ]]; then
 	SRCACHE=${SRCACHE:-n}
 	SETMISC=${SETMISC:-n}
 	NGXECHO=${NGXECHO:-n}
+	ZLIBNG=${ZLIBNG:-n}
+	PCRE2=${PCRE2:-n}
+	NGXWAF=${NGXWAF:-n}
 	HPACK=${HPACK:-n}
 	SSL=${SSL:-1}
 	RM_CONF=${RM_CONF:-y}
@@ -225,6 +235,15 @@ case $OPTION in
 		while [[ $NGXECHO != "y" && $NGXECHO != "n" ]]; do
 			read -rp "       echo-nginx-module [y/n]: " -e -i n NGXECHO
 		done
+		while [[ $ZLIBNG != "y" && $ZLIBNG != "n" ]]; do
+			read -rp "       zlib-ng [y/n]: " -e -i n ZLIBNG
+		done
+		while [[ $PCRE2 != "y" && $PCRE2 != "n" ]]; do
+			read -rp "       pcre2 [y/n]: " -e -i n PCRE2
+		done
+		while [[ $NGXWAF != "y" && $NGXWAF != "n" ]]; do
+			read -rp "       ngx_waf [y/n]: " -e -i n NGXWAF
+		done
 
 		if [[ $GEOIP = 'y' ]]; then
 			# - Ask for a Maxmind user id and license key if headless=n
@@ -275,7 +294,13 @@ case $OPTION in
 	apt-get install -y build-essential ca-certificates wget curl libpcre3 libpcre3-dev autoconf unzip automake libtool tar git libssl-dev zlib1g-dev uuid-dev lsb-release libxml2-dev libxslt1-dev cmake
 
 	if [[ $MODSEC == 'y' ]]; then
-		apt-get install -y apt-utils libcurl4-openssl-dev libgeoip-dev liblmdb-dev libpcre++-dev libyajl-dev pkgconf
+		# https://github.com/owasp-modsecurity/ModSecurity/issues/2750
+		wget http://ftp.de.debian.org/debian/pool/main/libp/libpcre++/libpcre++-dev_0.9.5-6.1+b11_amd64.deb
+		wget http://ftp.de.debian.org/debian/pool/main/libp/libpcre++/libpcre++0v5_0.9.5-6.1+b11_amd64.deb
+		apt install -y ./libpcre++0v5_0.9.5-6.1+b11_amd64.deb ./libpcre++-dev_0.9.5-6.1+b11_amd64.deb
+		rm libpcre*.deb
+
+		apt-get install -y apt-utils libcurl4-openssl-dev libgeoip-dev liblmdb-dev libpcre++-dev libyajl-dev pkgconf libpcre2-dev pcre2-utils libmaxminddb-dev
 	fi
 
 	if [[ $GEOIP == 'y' ]]; then
@@ -286,6 +311,10 @@ case $OPTION in
 		fi
 		apt-get update
 		apt-get install -y geoipupdate
+	fi
+
+	if [[ $NGXWAF == 'y' ]]; then
+		apt-get install -y flex bison python3
 	fi
 
 	# PageSpeed
@@ -504,6 +533,51 @@ case $OPTION in
 		tar xaf v${NGXECHO_VER}.tar.gz
 	fi
 
+	# Download zlib-ng
+	if [[ $ZLIBNG == 'y' ]]; then
+		cd /usr/local/src/nginx/modules || exit 1
+		wget https://github.com/zlib-ng/zlib-ng/archive/refs/tags/${ZLIBNG_VER}.tar.gz
+		tar xaf ${ZLIBNG_VER}.tar.gz
+		cd zlib-ng-${ZLIBNG_VER} || exit 1
+		./configure
+		make -j "$(nproc)"
+		make test
+	fi
+
+	# Download pcre2
+	if [[ $PCRE2 == 'y' ]]; then
+		cd /usr/local/src/nginx/modules || exit 1
+		wget https://github.com/PCRE2Project/pcre2/releases/download/pcre2-${PCRE2_VER}/pcre2-${PCRE2_VER}.tar.gz
+		tar xaf pcre2-${PCRE2_VER}.tar.gz
+	fi
+
+	# Download ngx_waf
+	if [[ $NGXWAF == 'y' ]]; then
+		cd /usr/local/src/nginx/modules || exit 1
+		git clone --depth 1 -b master --single-branch https://github.com/ADD-SP/ngx_waf.git
+		cd ngx_waf || exit 1
+		make -j "$(nproc)"
+		cd /usr/local/src/nginx/modules || exit 1
+		git clone --depth 1 https://github.com/libinjection/libinjection.git
+		cd libinjection || exit 1
+		./autogen.sh
+		./configure --prefix=/usr/local/libinjection
+		make -j "$(nproc)"
+		make install
+		export LIB_INJECTION=/usr/local/libinjection
+		cd /usr/local/src/nginx/modules || exit 1
+		git clone --depth 1 --branch stable https://github.com/jedisct1/libsodium.git
+		cd libsodium || exit 1
+		./configure --prefix=/usr/local/libsodium --with-pic
+		make -j$(nproc)
+		make check -j $(nproc)
+		make install
+		export LIB_SODIUM=/usr/local/libsodium
+		cd /usr/local/src/nginx/modules || exit 1
+		git clone --depth 1 https://github.com/troydhanson/uthash.git
+		export LIB_UTHASH=/usr/local/src/nginx/modules/uthash
+	fi
+
 	# Download and extract of Nginx source code
 	cd /usr/local/src/nginx/ || exit 1
 	wget -qO- http://nginx.org/download/nginx-${NGINX_VER}.tar.gz | tar zxf -
@@ -690,10 +764,43 @@ case $OPTION in
 		)
 	fi
 
+	if [[ $ZLIBNG == 'y' ]]; then
+		NGINX_MODULES=$(
+			echo "$NGINX_MODULES"
+			echo --with-zlib=/usr/local/src/nginx/modules/zlib-ng-${ZLIBNG_VER}
+		)
+	fi
+
+	if [[ $PCRE2 == 'y' ]]; then
+		NGINX_MODULES=$(
+			echo "$NGINX_MODULES"
+			echo --with-pcre=/usr/local/src/nginx/modules/pcre2-${PCRE2_VER}
+		)
+	fi
+
+	if [[ $NGXWAF == 'y' ]]; then
+		NGINX_MODULES=$(
+			echo "$NGINX_MODULES"
+			echo --add-module=/usr/local/src/nginx/modules/ngx_waf
+		)
+	fi
+
 	# Cloudflare's TLS Dynamic Record Resizing patch
 	if [[ $TLSDYN == 'y' ]]; then
-		wget https://raw.githubusercontent.com/nginx-modules/ngx_http_tls_dyn_size/master/nginx__dynamic_tls_records_1.17.7%2B.patch -O tcp-tls.patch
+		wget https://raw.githubusercontent.com/nginx-modules/ngx_http_tls_dyn_size/refs/heads/master/nginx__dynamic_tls_records_1.27.5%2B.patch -O tcp-tls.patch
 		patch -p1 <tcp-tls.patch
+	fi
+
+	# Use the OpenSSL library instead of the Nginx original function.
+	if [[ $OPENSSL == 'y' ]]; then
+		wget https://raw.githubusercontent.com/kn007/patch/refs/heads/master/use_openssl_md5_sha1.patch -O use_openssl_md5_sha1.patch
+		patch -p1 <use_openssl_md5_sha1.patch
+	fi
+
+	# use zlib-ng instead of zlib
+	if [[ $ZLIBNG == 'y' ]]; then
+		wget https://raw.githubusercontent.com/maximemichaud/nginx-autoinstall/refs/heads/master/patches/nginx_zlib-ng.patch -O nginx_zlib-ng.patch
+		patch -p1 <nginx_zlib-ng.patch
 	fi
 
 	# HTTP3
@@ -748,6 +855,11 @@ case $OPTION in
 	fi
 
 	./configure $NGINX_OPTIONS $NGINX_MODULES
+
+	if [[ $NGXWAF == 'y' ]]; then
+		sed -i 's/^\(CFLAGS.*\)/\1 -fstack-protector-strong -Wno-sign-compare/' objs/Makefile
+	fi
+
 	make -j "$(nproc)"
 	make install
 

@@ -15,7 +15,7 @@ if [[ $INSTALL_TYPE == "FULL" ]]; then
     export VTS=y
     export RTMP=y
     export TESTCOOKIE=y
-    export HTTP3=n Not Working Properly With Recent & now unnecessary with mainline http3
+    export HTTP3=n # Not Working Properly With Recent & now unnecessary with mainline http3
     export MODSEC=y
     export HPACK=n # Not Compiling Correctly Latest Release
     export REDIS2=y
@@ -23,6 +23,10 @@ if [[ $INSTALL_TYPE == "FULL" ]]; then
     export SRCACHE=y
     export SETMISC=y
     export NGXECHO=y
+    export TLSDYN=y
+    export ZLIBNG=y
+    export PCRE2=y
+    export NGXWAF=y
 fi
 
 bash -x ../../nginx-autoinstall.sh

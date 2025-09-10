@@ -39,6 +39,9 @@ The script might work on ARM-based architectures, but it's only being regularly 
 - [nginx_substitutions_filter](https://github.com/yaoweibin/ngx_http_substitutions_filter_module): regular expression and fixed string substitutions for nginx
 - [RTMP module](https://github.com/arut/nginx-rtmp-module) (NGINX-based Media Streaming Server)
 - [nginx-ultimate-bad-bot-blocker](https://github.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker): Bad Bot and User-Agent Blocker, Spam Referrer Blocker, Anti DDOS, Bad IP Blocker and WordPress Theme Detector Blocker
+- [zlib-ng](https://github.com/zlib-ng/zlib-ng): zlib replacement with optimizations for "next generation" systems.
+- [pcre2](https://github.com/PCRE2Project/pcre2): The PCRE2 library is a set of C functions that implement regular expression pattern matching.
+- [ngx_waf](https://github.com/ADD-SP/ngx_waf.git): ModSecurity compatible Nginx firewall module
 
 #### Cache Modules
 
