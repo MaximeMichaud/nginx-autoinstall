@@ -569,8 +569,8 @@ case $OPTION in
 		git clone --depth 1 --branch stable https://github.com/jedisct1/libsodium.git
 		cd libsodium || exit 1
 		./configure --prefix=/usr/local/libsodium --with-pic
-		make -j$(nproc)
-		make check -j $(nproc)
+		make -j"$(nproc)"
+		make check -j "$(nproc)"
 		make install
 		export LIB_SODIUM=/usr/local/libsodium
 		cd /usr/local/src/nginx/modules || exit 1

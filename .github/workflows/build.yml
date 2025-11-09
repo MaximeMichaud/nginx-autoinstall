@@ -40,4 +40,9 @@ jobs:
 
       - name: Build NGINX in Docker
         continue-on-error: true
-        run: docker build . --file .github/workflows/docker/Dockerfile --build-arg NGINX_VER=${{ matrix.nginx_ver }} --build-arg BASE_IMAGE=${{ matrix.os }} --build-arg INSTALL_TYPE=${{ matrix.install_type }} --build-arg SSL=${{ matrix.ssl }}
+        run: >-
+          docker build . --file .github/workflows/docker/Dockerfile
+          --build-arg NGINX_VER=${{ matrix.nginx_ver }}
+          --build-arg BASE_IMAGE=${{ matrix.os }}
+          --build-arg INSTALL_TYPE=${{ matrix.install_type }}
+          --build-arg SSL=${{ matrix.ssl }}
