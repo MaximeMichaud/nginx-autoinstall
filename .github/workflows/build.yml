@@ -36,7 +36,7 @@ jobs:
             ssl: LIBRESSL
       fail-fast: false
     steps:
-      - uses: actions/checkout@v6.0.1
+      - uses: actions/checkout@v6.0.2
 
       - name: Build NGINX in Docker
         continue-on-error: true
