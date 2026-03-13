@@ -204,7 +204,7 @@ index ebd0e77c..b152b504 100644
 +
 +    /* hash table for dynamic entries, instead using a generic hash table,
 +       which would be too slow to process a significant amount of headers,
-+       this table is not determenistic, and might ocasionally fail to insert
++       this table is not deterministic, and might occasionally fail to insert
 +       a value, at the cost of slightly worse compression, but significantly
 +       faster performance */
 +    ngx_http_v2_hpack_enc_entry_t    htable[HPACK_ENC_HTABLE_SZ];

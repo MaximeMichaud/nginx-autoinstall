@@ -81,7 +81,7 @@ NGINX_MODULES=${NGINX_MODULES:-"--with-threads \
 	--with-http_degradation_module \
 	--with-http_secure_link_module"}
 
-# Define installation parameters for headless install (fallback if unspecifed)
+# Define installation parameters for headless install (fallback if unspecified)
 if [[ $HEADLESS == "y" ]]; then
 	# Define options
 	OPTION=${OPTION:-1}
