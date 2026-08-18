@@ -4,7 +4,7 @@ Compile and install NGINX from source with optional features, modules and patche
 
 ## Compatibility
 
-- Debian 11 and later
+- Debian 11, 12 and 13
 - Ubuntu 22.04 and later
 
 The script might work on ARM-based architectures, but it's only being regularly tested against x86_64 with [GitHub Actions](https://github.com/MaximeMichaud/nginx-autoinstall/actions/workflows/build.yml).

@@ -291,23 +291,41 @@ case $OPTION in
 
 	# Dependencies
 	apt-get update
-	apt-get install -y build-essential ca-certificates wget curl libpcre3 libpcre3-dev autoconf unzip automake libtool tar git libssl-dev zlib1g-dev uuid-dev lsb-release libxml2-dev libxslt1-dev cmake
+	# Debian 13+ dropped the legacy PCRE (libpcre3) packages, PCRE2 is used instead
+	PCRE_PACKAGES="libpcre2-dev"
+	if [[ -n $(apt-cache madison libpcre3-dev 2>/dev/null) ]]; then
+		PCRE_PACKAGES="libpcre3 libpcre3-dev $PCRE_PACKAGES"
+	fi
+	apt-get install -y build-essential ca-certificates wget curl $PCRE_PACKAGES autoconf unzip automake libtool tar git libssl-dev zlib1g-dev uuid-dev lsb-release libxml2-dev libxslt1-dev cmake
 
 	if [[ $MODSEC == 'y' ]]; then
+		# On distros that still ship the legacy PCRE, ModSecurity needs libpcre++
 		# https://github.com/owasp-modsecurity/ModSecurity/issues/2750
-		wget http://ftp.de.debian.org/debian/pool/main/libp/libpcre++/libpcre++-dev_0.9.5-6.1+b11_amd64.deb
-		wget http://ftp.de.debian.org/debian/pool/main/libp/libpcre++/libpcre++0v5_0.9.5-6.1+b11_amd64.deb
-		apt install -y ./libpcre++0v5_0.9.5-6.1+b11_amd64.deb ./libpcre++-dev_0.9.5-6.1+b11_amd64.deb
-		rm libpcre*.deb
+		# On Debian 13+ the legacy PCRE is gone and ModSecurity builds against PCRE2
+		if [[ -n $(apt-cache madison libpcre3-dev 2>/dev/null) ]]; then
+			wget http://ftp.de.debian.org/debian/pool/main/libp/libpcre++/libpcre++-dev_0.9.5-6.1+b11_amd64.deb
+			wget http://ftp.de.debian.org/debian/pool/main/libp/libpcre++/libpcre++0v5_0.9.5-6.1+b11_amd64.deb
+			apt install -y ./libpcre++0v5_0.9.5-6.1+b11_amd64.deb ./libpcre++-dev_0.9.5-6.1+b11_amd64.deb
+			rm libpcre*.deb
+		fi
 
-		apt-get install -y apt-utils libcurl4-openssl-dev libgeoip-dev liblmdb-dev libpcre++-dev libyajl-dev pkgconf libpcre2-dev pcre2-utils libmaxminddb-dev
+		apt-get install -y apt-utils libcurl4-openssl-dev libgeoip-dev liblmdb-dev libyajl-dev pkgconf libpcre2-dev pcre2-utils libmaxminddb-dev
 	fi
 
 	if [[ $GEOIP == 'y' ]]; then
-		if grep -q "main contrib" /etc/apt/sources.list; then
-			echo "main contrib already in sources.list... Skipping"
-		else
-			sed -i "s/main/main contrib/g" /etc/apt/sources.list
+		if [[ -f /etc/apt/sources.list.d/debian.sources ]]; then
+			# Debian 12+ deb822 format
+			if grep -q "^Components:.*contrib" /etc/apt/sources.list.d/debian.sources; then
+				echo "contrib already in debian.sources... Skipping"
+			else
+				sed -i "/^Components:/ s/$/ contrib/" /etc/apt/sources.list.d/debian.sources
+			fi
+		elif [[ -f /etc/apt/sources.list ]]; then
+			if grep -q "main contrib" /etc/apt/sources.list; then
+				echo "main contrib already in sources.list... Skipping"
+			else
+				sed -i "s/main/main contrib/g" /etc/apt/sources.list
+			fi
 		fi
 		apt-get update
 		apt-get install -y geoipupdate
@@ -496,8 +514,7 @@ case $OPTION in
 		cd /usr/local/src/nginx/modules || exit 1
 		git clone --depth 1 -b v3/master --single-branch https://github.com/SpiderLabs/ModSecurity
 		cd ModSecurity || exit 1
-		git submodule init
-		git submodule update
+		git submodule update --init --recursive
 		./build.sh
 		./configure
 		make -j "$(nproc)"
@@ -617,11 +634,8 @@ case $OPTION in
 
 	if [[ $BROTLI == 'y' ]]; then
 		NGINX_MODULES=$(
-		    export CFLAGS="-m64 -march=native -mtune=native -Ofast -flto -funroll-loops -ffunction-sections -fdata-sections -Wl,--gc-sections"
 			echo "$NGINX_MODULES"
-			export LDFLAGS="-m64 -Wl,-s -Wl,-Bsymbolic -Wl,--gc-sections"
 			echo "--add-module=/usr/local/src/nginx/modules/ngx_brotli"
-			make && make install
 		)
 	fi
 
@@ -788,13 +802,23 @@ case $OPTION in
 	# Cloudflare's TLS Dynamic Record Resizing patch
 	if [[ $TLSDYN == 'y' ]]; then
 		wget https://raw.githubusercontent.com/nginx-modules/ngx_http_tls_dyn_size/refs/heads/master/nginx__dynamic_tls_records_1.27.5%2B.patch -O tcp-tls.patch
-		patch -p1 <tcp-tls.patch
+		# Only apply if the patch is compatible with this nginx version
+		# A partial application would leave the source tree in a broken state
+		if patch -p1 --dry-run --batch <tcp-tls.patch >/dev/null 2>&1; then
+			patch -p1 <tcp-tls.patch
+		else
+			echo "Warning: TLS Dynamic Records patch is not compatible with nginx $NGINX_VER... Skipping"
+		fi
 	fi
 
 	# Use the OpenSSL library instead of the Nginx original function.
 	if [[ $OPENSSL == 'y' ]]; then
 		wget https://raw.githubusercontent.com/kn007/patch/refs/heads/master/use_openssl_md5_sha1.patch -O use_openssl_md5_sha1.patch
-		patch -p1 <use_openssl_md5_sha1.patch
+		if patch -p1 --dry-run --batch <use_openssl_md5_sha1.patch >/dev/null 2>&1; then
+			patch -p1 <use_openssl_md5_sha1.patch
+		else
+			echo "Warning: OpenSSL md5/sha1 patch is not compatible with nginx $NGINX_VER... Skipping"
+		fi
 	fi
 
 	# use zlib-ng instead of zlib
@@ -857,7 +881,7 @@ case $OPTION in
 	./configure $NGINX_OPTIONS $NGINX_MODULES
 
 	if [[ $NGXWAF == 'y' ]]; then
-		sed -i 's/^\(CFLAGS.*\)/\1 -fstack-protector-strong -Wno-sign-compare/' objs/Makefile
+		sed -i 's/^\(CFLAGS.*\)/\1 -fstack-protector-strong -Wno-sign-compare -Wno-unused-function/' objs/Makefile
 	fi
 
 	make -j "$(nproc)"
