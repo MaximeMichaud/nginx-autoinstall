@@ -1,0 +1,35 @@
+---
+name: NGINX distribution selection
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  selection:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.2
+      - name: Validate selection without installing
+        run: bash tests/flavors.sh
+
+  compile-flavors:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor: [nginx, freenginx]
+        channel: [STABLE, MAINLINE]
+    steps:
+      - uses: actions/checkout@v6.0.2
+      - name: Compile and validate the selected distribution
+        run: >-
+          docker build . --file .github/workflows/docker/Dockerfile
+          --build-arg BASE_IMAGE=debian:13
+          --build-arg INSTALL_TYPE=LIGHT
+          --build-arg SSL=SYSTEM
+          --build-arg VTS=y
+          --build-arg NGINX_FLAVOR=${{ matrix.flavor }}
+          --build-arg NGINX_VER=${{ matrix.channel }}
+          --build-arg HTTP3=${{ matrix.flavor == 'freenginx' && 'y' || 'n' }}

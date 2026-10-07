@@ -1,6 +1,6 @@
 # nginx-autoinstall
 
-Compile and install NGINX from source with optional features, modules and patches.
+Compile and install official NGINX or freenginx from source with optional features, modules and patches.
 
 ## Compatibility
 
@@ -11,7 +11,7 @@ The script might work on ARM-based architectures, but it's only being regularly 
 
 ## Features
 
-- Latest mainline or stable version, from source
+- Choice of official NGINX or freenginx, with separate stable and mainline releases
 - Optional modules and patches
 - [Custom nginx.conf](https://github.com/MaximeMichaud/nginx-autoinstall/blob/master/conf/nginx.conf) (default does not work)
 - [Init script for systemd](https://github.com/MaximeMichaud/nginx-autoinstall/blob/master/conf/nginx.service) (not provided by default)
@@ -70,7 +70,18 @@ You will be able to:
 - Uninstall NGINX with optional cleanup
 - Self-update the script
 
-Just follow the question!
+The installer asks which distribution to use:
+
+```text
+1) NGINX official
+2) freenginx
+```
+
+It then asks for stable or mainline and the optional modules. Official NGINX
+stable remains the default for unattended installations. Both distributions
+use the existing `nginx` executable name, service and configuration paths.
+Selecting another distribution replaces the current server; it does not
+install a second service alongside it.
 
 You can check [configuration examples](https://github.com/MaximeMichaud/nginx-autoinstall/tree/master/conf) for the custom modules.
 
@@ -112,6 +123,36 @@ RM_LOGS=y \
 ```
 
 All the default variables are set at the beginning of the script.
+
+### freenginx
+
+Select freenginx stable without interactive prompts:
+
+```sh
+HEADLESS=y NGINX_FLAVOR=freenginx NGINX_VER=STABLE ./nginx-autoinstall.sh
+```
+
+Use `NGINX_FLAVOR=nginx` for official NGINX, and `NGINX_VER=MAINLINE` for either
+project's mainline branch. Release overrides are independent:
+`NGINX_STABLE_VER`, `NGINX_MAINLINE_VER`, `FREENGINX_STABLE_VER` and
+`FREENGINX_MAINLINE_VER`.
+
+Preview the selected version and download URL without root or any installation:
+
+```sh
+NGINX_FLAVOR=freenginx NGINX_VER=MAINLINE ./nginx-autoinstall.sh --print-plan
+```
+
+For freenginx, `HTTP3=y` enables its native HTTP/3 module with the selected TLS
+library. It does not apply the old Quiche patch. The official-NGINX-only
+`TLSDYN`, `HPACK` and `ZLIBNG` patches are not offered for freenginx; requesting
+them in unattended mode fails before changing the system. Other optional
+third-party modules still depend on compatibility with the selected release.
+The distribution CI builds both branches with system OpenSSL and VTS, and
+also enables native HTTP/3 for freenginx.
+
+Existing configurations are preserved. When switching distributions, review
+behavioral differences such as freenginx's `limit_rate_after` semantics.
 
 ## LICENSE
 

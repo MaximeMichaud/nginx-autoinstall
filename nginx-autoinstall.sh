@@ -1,6 +1,64 @@
 #!/bin/bash
 # shellcheck disable=SC1090,SC2086,SC2034,SC1091,SC2027,SC2206,SC2002
 
+# Release pins are independent: the projects do not share release numbers.
+NGINX_MAINLINE_VER=${NGINX_MAINLINE_VER:-1.31.5}
+NGINX_STABLE_VER=${NGINX_STABLE_VER:-1.30.4}
+FREENGINX_MAINLINE_VER=${FREENGINX_MAINLINE_VER:-1.31.4}
+FREENGINX_STABLE_VER=${FREENGINX_STABLE_VER:-1.30.1}
+
+select_nginx_source() {
+	NGINX_FLAVOR=${NGINX_FLAVOR:-nginx}
+	case $NGINX_FLAVOR in
+	nginx)
+		NGINX_LABEL="NGINX official"
+		NGINX_RELEASE_STABLE=$NGINX_STABLE_VER
+		NGINX_RELEASE_MAINLINE=$NGINX_MAINLINE_VER
+		;;
+	freenginx)
+		NGINX_LABEL=freenginx
+		NGINX_RELEASE_STABLE=$FREENGINX_STABLE_VER
+		NGINX_RELEASE_MAINLINE=$FREENGINX_MAINLINE_VER
+		;;
+	*)
+		echo "Error: NGINX_FLAVOR must be nginx or freenginx." >&2
+		return 1
+		;;
+	esac
+	case ${NGINX_VER:-STABLE} in
+	1 | STABLE) NGINX_VERSION=$NGINX_RELEASE_STABLE ;;
+	2 | MAINLINE) NGINX_VERSION=$NGINX_RELEASE_MAINLINE ;;
+	*)
+		echo "Error: NGINX_VER must be STABLE, MAINLINE, 1 or 2." >&2
+		return 1
+		;;
+	esac
+	if [[ ! $NGINX_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+		echo "Error: the selected release must be a numeric X.Y.Z version." >&2
+		return 1
+	fi
+	NGINX_SOURCE_NAME=${NGINX_FLAVOR}-${NGINX_VERSION}
+	NGINX_SOURCE_URL=https://${NGINX_FLAVOR}.org/download/${NGINX_SOURCE_NAME}.tar.gz
+}
+
+validate_nginx_patches() {
+	if [[ $NGINX_FLAVOR == freenginx && ( $TLSDYN == y || $HPACK == y || $ZLIBNG == y ) ]]; then
+		echo "Error: TLSDYN, HPACK and ZLIBNG patches target official NGINX and are not supported with freenginx." >&2
+		return 1
+	fi
+}
+
+# Read-only planning is available without root, downloads or system changes.
+if [[ ${1:-} == --print-plan ]]; then
+	select_nginx_source && validate_nginx_patches || exit 1
+	printf 'NGINX_FLAVOR=%s\nNGINX_VERSION=%s\nNGINX_SOURCE_NAME=%s\nNGINX_SOURCE_URL=%s\n' \
+		"$NGINX_FLAVOR" "$NGINX_VERSION" "$NGINX_SOURCE_NAME" "$NGINX_SOURCE_URL"
+	exit 0
+elif [[ $# -gt 0 ]]; then
+	echo "Usage: $0 [--print-plan]" >&2
+	exit 1
+fi
+
 if [[ $EUID -ne 0 ]]; then
 	echo -e "Sorry, you need to run this as root"
 	exit 1
@@ -31,23 +89,21 @@ if [[ -f /etc/os-release ]]; then
 fi
 
 # Define versions
-NGINX_MAINLINE_VER=${NGINX_MAINLINE_VER:-1.31.3}
-NGINX_STABLE_VER=${NGINX_STABLE_VER:-1.30.4}
-LIBRESSL_VER=${LIBRESSL_VER:-3.9.2}
-OPENSSL_VER=${OPENSSL_VER:-3.6.0}
+LIBRESSL_VER=${LIBRESSL_VER:-4.3.2}
+OPENSSL_VER=${OPENSSL_VER:-4.0.1}
 NPS_VER=${NPS_VER:-1.13.35.2}
-HEADERMOD_VER=${HEADERMOD_VER:-0.37}
-LIBMAXMINDDB_VER=${LIBMAXMINDDB_VER:-1.12.2}
+HEADERMOD_VER=${HEADERMOD_VER:-0.40}
+LIBMAXMINDDB_VER=${LIBMAXMINDDB_VER:-1.13.3}
 GEOIP2_VER=${GEOIP2_VER:-3.4}
-LUA_JIT_VER=${LUA_JIT_VER:-2.1-20250826}
-LUA_NGINX_VER=${LUA_NGINX_VER:-0.10.27}
-LUA_RESTYCORE_VER=${LUA_RESTYCORE_VER:-0.1.29}
-LUA_RESTYLRUCACHE_VER=${LUA_RESTYLRUCACHE_VER:-0.14}
-NGINX_DEV_KIT=${NGINX_DEV_KIT:-0.3.3}
+LUA_JIT_VER=${LUA_JIT_VER:-2.1-20260724}
+LUA_NGINX_VER=${LUA_NGINX_VER:-0.10.31}
+LUA_RESTYCORE_VER=${LUA_RESTYCORE_VER:-0.1.32}
+LUA_RESTYLRUCACHE_VER=${LUA_RESTYLRUCACHE_VER:-0.15}
+NGINX_DEV_KIT=${NGINX_DEV_KIT:-0.3.4}
 HTTPREDIS_VER=${HTTPREDIS_VER:-0.3.9}
-NGXECHO_VER=${NGXECHO_VER:-0.63}
-ZLIBNG_VER=${ZLIBNG_VER:-2.2.4}
-PCRE2_VER=${PCRE2_VER:-10.45}
+NGXECHO_VER=${NGXECHO_VER:-0.65}
+ZLIBNG_VER=${ZLIBNG_VER:-2.3.3}
+PCRE2_VER=${PCRE2_VER:-10.47}
 # Define options
 NGINX_OPTIONS=${NGINX_OPTIONS:-"
 	--prefix=/etc/nginx \
@@ -85,6 +141,7 @@ NGINX_MODULES=${NGINX_MODULES:-"--with-threads \
 if [[ $HEADLESS == "y" ]]; then
 	# Define options
 	OPTION=${OPTION:-1}
+	NGINX_FLAVOR=${NGINX_FLAVOR:-nginx}
 	NGINX_VER=${NGINX_VER:-1}
 	PAGESPEED=${PAGESPEED:-n}
 	BROTLI=${BROTLI:-n}
@@ -141,28 +198,29 @@ case $OPTION in
 1)
 	if [[ $HEADLESS != "y" ]]; then
 		echo ""
-		echo "This script will install Nginx with some optional modules."
-		echo ""
-		echo "Do you want to install Nginx stable or mainline?"
-		echo "   1) Stable $NGINX_STABLE_VER"
-		echo "   2) Mainline $NGINX_MAINLINE_VER"
-		echo ""
-		while [[ $NGINX_VER != "1" && $NGINX_VER != "2" && $NGINX_VER != "STABLE" && $NGINX_VER != "MAINLINE" ]]; do
-			read -rp "Select an option [1-2]: " -e -i 1 NGINX_VER
+		echo "Which server do you want to install or update?"
+		echo "   1) NGINX official"
+		echo "   2) freenginx"
+		while [[ -z $NGINX_FLAVOR ]]; do
+			read -rp "Select a server [1-2]: " -e -i 1 NGINX_FLAVOR_CHOICE || exit 1
+			case $NGINX_FLAVOR_CHOICE in
+			1) NGINX_FLAVOR=nginx ;;
+			2) NGINX_FLAVOR=freenginx ;;
+			esac
 		done
 	fi
-	case $NGINX_VER in
-	1 | STABLE)
-		NGINX_VER=$NGINX_STABLE_VER
-		;;
-	2 | MAINLINE)
-		NGINX_VER=$NGINX_MAINLINE_VER
-		;;
-	*)
-		echo "NGINX_VER unspecified, fallback to stable $NGINX_STABLE_VER"
-		NGINX_VER=$NGINX_STABLE_VER
-		;;
-	esac
+	select_nginx_source || exit 1
+	if [[ $HEADLESS != "y" ]]; then
+		echo ""
+		echo "Do you want to install $NGINX_LABEL stable or mainline?"
+		echo "   1) Stable $NGINX_RELEASE_STABLE"
+		echo "   2) Mainline $NGINX_RELEASE_MAINLINE"
+		echo ""
+		while [[ $NGINX_VER != "1" && $NGINX_VER != "2" && $NGINX_VER != "STABLE" && $NGINX_VER != "MAINLINE" ]]; do
+			read -rp "Select an option [1-2]: " -e -i 1 NGINX_VER || exit 1
+		done
+	fi
+	select_nginx_source || exit 1
 	if [[ $HEADLESS != "y" ]]; then
 		echo ""
 		echo "Please tell me which modules you want to install."
@@ -170,8 +228,18 @@ case $OPTION in
 		echo ""
 		echo "Modules to install :"
 		while [[ $HTTP3 != "y" && $HTTP3 != "n" ]]; do
-			read -rp "       HTTP/3 (⚠️ Patch by Cloudflare, will install BoringSSL, Quiche, Rust and Go) [y/n]: " -e -i n HTTP3
+			if [[ $NGINX_FLAVOR == freenginx ]]; then
+				read -rp "       Native HTTP/3 module [y/n]: " -e -i n HTTP3
+			else
+				read -rp "       HTTP/3 (Cloudflare patch, BoringSSL, Quiche, Rust and Go) [y/n]: " -e -i n HTTP3
+			fi
 		done
+		if [[ $NGINX_FLAVOR == freenginx ]]; then
+			validate_nginx_patches || exit 1
+			TLSDYN=n
+			HPACK=n
+			ZLIBNG=n
+		fi
 		while [[ $TLSDYN != "y" && $TLSDYN != "n" ]]; do
 			read -rp "       Cloudflare's TLS Dynamic Record Resizing patch [y/n]: " -e -i n TLSDYN
 		done
@@ -251,7 +319,7 @@ case $OPTION in
 				read -rp "       Enter your Maxmind license key: " -e GEOIP2_LICENSE_KEY
 		fi
 
-		if [[ $HTTP3 != 'y' ]]; then
+		if [[ $HTTP3 != 'y' || $NGINX_FLAVOR == freenginx ]]; then
 			echo ""
 			echo "Choose your OpenSSL implementation:"
 			echo "   1) System's OpenSSL ($(openssl version | cut -c9-14))"
@@ -263,7 +331,8 @@ case $OPTION in
 			done
 		fi
 	fi
-	if [[ $HTTP3 != 'y' ]]; then
+	validate_nginx_patches || exit 1
+	if [[ $HTTP3 != 'y' || $NGINX_FLAVOR == freenginx ]]; then
 		case $SSL in
 		1 | SYSTEM) ;;
 
@@ -280,7 +349,7 @@ case $OPTION in
 	fi
 	if [[ $HEADLESS != "y" ]]; then
 		echo ""
-		read -n1 -r -p "Nginx is ready to be installed, press any key to continue..."
+		read -n1 -r -p "$NGINX_LABEL $NGINX_VERSION is ready to be installed, press any key to continue..." || exit 1
 		echo ""
 	fi
 
@@ -290,24 +359,46 @@ case $OPTION in
 	mkdir -p /usr/local/src/nginx/modules
 
 	# Dependencies
+	# PCRE2, not the old libpcre3: Debian 13 dropped the PCRE1 packages, so
+	# libpcre3/libpcre3-dev fail to resolve there and take the whole apt
+	# transaction down with them - wget included, which then surfaces much later
+	# as an unexplained "gzip: stdin: unexpected end of file" on the nginx
+	# tarball. libpcre2-dev exists on every release this script supports
+	# (Debian 11+, Ubuntu 22.04+) and is what nginx links against nowadays.
 	apt-get update
-	apt-get install -y build-essential ca-certificates wget curl libpcre3 libpcre3-dev autoconf unzip automake libtool tar git libssl-dev zlib1g-dev uuid-dev lsb-release libxml2-dev libxslt1-dev cmake
+	if ! apt-get install -y build-essential ca-certificates wget curl libpcre2-dev autoconf unzip automake libtool tar git libssl-dev zlib1g-dev uuid-dev lsb-release libxml2-dev libxslt1-dev cmake; then
+		echo "Error: could not install the build dependencies. Fix the errors above and re-run; continuing would fail later with a confusing message."
+		exit 1
+	fi
 
 	if [[ $MODSEC == 'y' ]]; then
+		# On distros that still ship the legacy PCRE, ModSecurity needs libpcre++
 		# https://github.com/owasp-modsecurity/ModSecurity/issues/2750
-		wget http://ftp.de.debian.org/debian/pool/main/libp/libpcre++/libpcre++-dev_0.9.5-6.1+b11_amd64.deb
-		wget http://ftp.de.debian.org/debian/pool/main/libp/libpcre++/libpcre++0v5_0.9.5-6.1+b11_amd64.deb
-		apt install -y ./libpcre++0v5_0.9.5-6.1+b11_amd64.deb ./libpcre++-dev_0.9.5-6.1+b11_amd64.deb
-		rm libpcre*.deb
+		# On Debian 13+ the legacy PCRE is gone and ModSecurity builds against PCRE2
+		if [[ -n $(apt-cache madison libpcre3-dev 2>/dev/null) ]]; then
+			wget http://ftp.de.debian.org/debian/pool/main/libp/libpcre++/libpcre++-dev_0.9.5-6.1+b11_amd64.deb
+			wget http://ftp.de.debian.org/debian/pool/main/libp/libpcre++/libpcre++0v5_0.9.5-6.1+b11_amd64.deb
+			apt install -y ./libpcre++0v5_0.9.5-6.1+b11_amd64.deb ./libpcre++-dev_0.9.5-6.1+b11_amd64.deb
+			rm libpcre*.deb
+		fi
 
-		apt-get install -y apt-utils libcurl4-openssl-dev libgeoip-dev liblmdb-dev libpcre++-dev libyajl-dev pkgconf libpcre2-dev pcre2-utils libmaxminddb-dev
+		apt-get install -y apt-utils libcurl4-openssl-dev libgeoip-dev liblmdb-dev libyajl-dev pkgconf libpcre2-dev pcre2-utils libmaxminddb-dev
 	fi
 
 	if [[ $GEOIP == 'y' ]]; then
-		if grep -q "main contrib" /etc/apt/sources.list; then
-			echo "main contrib already in sources.list... Skipping"
-		else
-			sed -i "s/main/main contrib/g" /etc/apt/sources.list
+		if [[ -f /etc/apt/sources.list.d/debian.sources ]]; then
+			# Debian 12+ deb822 format
+			if grep -q "^Components:.*contrib" /etc/apt/sources.list.d/debian.sources; then
+				echo "contrib already in debian.sources... Skipping"
+			else
+				sed -i "/^Components:/ s/$/ contrib/" /etc/apt/sources.list.d/debian.sources
+			fi
+		elif [[ -f /etc/apt/sources.list ]]; then
+			if grep -q "main contrib" /etc/apt/sources.list; then
+				echo "main contrib already in sources.list... Skipping"
+			else
+				sed -i "s/main/main contrib/g" /etc/apt/sources.list
+			fi
 		fi
 		apt-get update
 		apt-get install -y geoipupdate
@@ -496,8 +587,7 @@ case $OPTION in
 		cd /usr/local/src/nginx/modules || exit 1
 		git clone --depth 1 -b v3/master --single-branch https://github.com/SpiderLabs/ModSecurity
 		cd ModSecurity || exit 1
-		git submodule init
-		git submodule update
+		git submodule update --init --recursive
 		./build.sh
 		./configure
 		make -j "$(nproc)"
@@ -580,8 +670,12 @@ case $OPTION in
 
 	# Download and extract of Nginx source code
 	cd /usr/local/src/nginx/ || exit 1
-	wget -qO- http://nginx.org/download/nginx-${NGINX_VER}.tar.gz | tar zxf -
-	cd nginx-${NGINX_VER} || exit 1
+	if ! wget -O "${NGINX_SOURCE_NAME}.tar.gz" "$NGINX_SOURCE_URL" ||
+		! tar zxf "${NGINX_SOURCE_NAME}.tar.gz"; then
+		echo "Error: could not download or extract $NGINX_LABEL $NGINX_VERSION." >&2
+		exit 1
+	fi
+	cd "$NGINX_SOURCE_NAME" || exit 1
 
 	# As the default nginx.conf does not work, we download a clean and working conf from my GitHub.
 	# We do it only if it does not already exist, so that it is not overriten if Nginx is being updated
@@ -590,7 +684,7 @@ case $OPTION in
 		cd /etc/nginx || exit 1
 		wget https://raw.githubusercontent.com/MaximeMichaud/nginx-autoinstall/master/conf/nginx.conf
 	fi
-	cd /usr/local/src/nginx/nginx-${NGINX_VER} || exit 1
+	cd "/usr/local/src/nginx/$NGINX_SOURCE_NAME" || exit 1
 
 	# Optional options
 	if [[ $LUA == 'y' ]]; then
@@ -617,11 +711,8 @@ case $OPTION in
 
 	if [[ $BROTLI == 'y' ]]; then
 		NGINX_MODULES=$(
-		    export CFLAGS="-m64 -march=native -mtune=native -Ofast -flto -funroll-loops -ffunction-sections -fdata-sections -Wl,--gc-sections"
 			echo "$NGINX_MODULES"
-			export LDFLAGS="-m64 -Wl,-s -Wl,-Bsymbolic -Wl,--gc-sections"
 			echo "--add-module=/usr/local/src/nginx/modules/ngx_brotli"
-			make && make install
 		)
 	fi
 
@@ -788,13 +879,23 @@ case $OPTION in
 	# Cloudflare's TLS Dynamic Record Resizing patch
 	if [[ $TLSDYN == 'y' ]]; then
 		wget https://raw.githubusercontent.com/nginx-modules/ngx_http_tls_dyn_size/refs/heads/master/nginx__dynamic_tls_records_1.27.5%2B.patch -O tcp-tls.patch
-		patch -p1 <tcp-tls.patch
+		# Only apply if the patch is compatible with this nginx version
+		# A partial application would leave the source tree in a broken state
+		if patch -p1 --dry-run --batch <tcp-tls.patch >/dev/null 2>&1; then
+			patch -p1 <tcp-tls.patch
+		else
+			echo "Warning: TLS Dynamic Records patch is not compatible with $NGINX_LABEL $NGINX_VERSION... Skipping"
+		fi
 	fi
 
 	# Use the OpenSSL library instead of the Nginx original function.
-	if [[ $OPENSSL == 'y' ]]; then
+	if [[ $OPENSSL == 'y' && $NGINX_FLAVOR == nginx ]]; then
 		wget https://raw.githubusercontent.com/kn007/patch/refs/heads/master/use_openssl_md5_sha1.patch -O use_openssl_md5_sha1.patch
-		patch -p1 <use_openssl_md5_sha1.patch
+		if patch -p1 --dry-run --batch <use_openssl_md5_sha1.patch >/dev/null 2>&1; then
+			patch -p1 <use_openssl_md5_sha1.patch
+		else
+			echo "Warning: OpenSSL md5/sha1 patch is not compatible with $NGINX_LABEL $NGINX_VERSION... Skipping"
+		fi
 	fi
 
 	# use zlib-ng instead of zlib
@@ -804,7 +905,9 @@ case $OPTION in
 	fi
 
 	# HTTP3
-	if [[ $HTTP3 == 'y' ]]; then
+	if [[ $HTTP3 == 'y' && $NGINX_FLAVOR == freenginx ]]; then
+		NGINX_MODULES="$NGINX_MODULES --with-http_v3_module"
+	elif [[ $HTTP3 == 'y' ]]; then
 		cd /usr/local/src/nginx/modules || exit 1
 		git clone --depth 1 --recursive https://github.com/cloudflare/quiche
 		# Dependencies for BoringSSL and Quiche
@@ -813,7 +916,7 @@ case $OPTION in
 		curl -sSf https://sh.rustup.rs | sh -s -- -y
 		source "$HOME/.cargo/env"
 
-		cd /usr/local/src/nginx/nginx-${NGINX_VER} || exit 1
+		cd "/usr/local/src/nginx/$NGINX_SOURCE_NAME" || exit 1
 		# Apply actual patch
 		patch -p01 </usr/local/src/nginx/modules/quiche/nginx/nginx-1.16.patch
 
@@ -854,14 +957,19 @@ case $OPTION in
 		export LUAJIT_INC=/usr/local/include/luajit-2.1/
 	fi
 
-	./configure $NGINX_OPTIONS $NGINX_MODULES
+	./configure $NGINX_OPTIONS $NGINX_MODULES || exit 1
 
 	if [[ $NGXWAF == 'y' ]]; then
-		sed -i 's/^\(CFLAGS.*\)/\1 -fstack-protector-strong -Wno-sign-compare/' objs/Makefile
+		sed -i 's/^\(CFLAGS.*\)/\1 -fstack-protector-strong -Wno-sign-compare -Wno-unused-function/' objs/Makefile
 	fi
 
-	make -j "$(nproc)"
-	make install
+	make -j "$(nproc)" || exit 1
+	NGINX_CANDIDATE_VERSION=$(./objs/nginx -v 2>&1) || exit 1
+	if [[ ${NGINX_CANDIDATE_VERSION%% (*} != "nginx version: ${NGINX_FLAVOR}/${NGINX_VERSION}" ]]; then
+		echo "Error: the compiled binary does not match the selected server and version." >&2
+		exit 1
+	fi
+	make install || exit 1
 
 	# remove debugging symbols
 	strip -s /usr/sbin/nginx
@@ -898,6 +1006,38 @@ case $OPTION in
 	if [[ -d /etc/nginx/conf.d && $LUA == 'y' ]]; then
 		# add necessary `lua_package_path` directive to `nginx.conf`, in the http context
 		echo -e 'lua_package_path "/etc/nginx/lib/lua/?.lua;;";' >/etc/nginx/conf.d/lua_package_path.conf
+	fi
+	if [[ -d /etc/nginx/conf.d && $VTS == 'y' && ! -e /etc/nginx/conf.d/vts.conf ]]; then
+		# VTS collects nothing until the shared zone is declared in the http
+		# context, so building the module in without this leaves it present and
+		# silent. 1m is the module default and covers a handful of server zones;
+		# raise it if you host many vhosts.
+		cat >/etc/nginx/conf.d/vts.conf <<'EOF'
+# Counters are collected as soon as this zone exists. To also expose them,
+# activate the example endpoint: mv vts-status.conf.example vts-status.conf
+vhost_traffic_status_zone shared:vhost_traffic_status:1m;
+EOF
+		# Shipped as .example so conf.d/*.conf does not load it: the endpoint
+		# picks a port, and a port collision would stop nginx from starting.
+		# Renaming it is a deliberate act; uncommenting a block that is half
+		# prose and half config is an invitation to a syntax error.
+		cat >/etc/nginx/conf.d/vts-status.conf.example <<'EOF'
+# Per-status request counters in Prometheus format, served by nginx itself:
+#   nginx_vts_server_requests_total{host="example.com",code="2xx"}
+# Activate with: mv vts-status.conf.example vts-status.conf && nginx -t && nginx -s reload
+#
+# Loopback on purpose. These counters describe all of your traffic and must not
+# be world-readable; if the scraper is remote, keep this listener private and
+# open the port to that single address in your firewall rather than here.
+server {
+    listen 127.0.0.1:8080;
+
+    location /status {
+        vhost_traffic_status_display;
+        vhost_traffic_status_display_format prometheus;
+    }
+}
+EOF
 	fi
 	# Restart Nginx
 	systemctl restart nginx
