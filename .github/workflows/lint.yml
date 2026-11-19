@@ -24,6 +24,8 @@ jobs:
         uses: super-linter/super-linter@v9.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SAVE_SUPER_LINTER_SUMMARY: true
+          ENABLE_GITHUB_PULL_REQUEST_SUMMARY_COMMENT: false
           VALIDATE_JSCPD: false
           VALIDATE_DOCKERFILE: false
           # TODO: Check eventually - new linters in v7/v8
