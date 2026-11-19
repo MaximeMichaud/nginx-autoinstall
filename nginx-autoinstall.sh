@@ -44,7 +44,7 @@ LUA_NGINX_VER=${LUA_NGINX_VER:-0.10.31}
 LUA_RESTYCORE_VER=${LUA_RESTYCORE_VER:-0.1.32}
 LUA_RESTYLRUCACHE_VER=${LUA_RESTYLRUCACHE_VER:-0.15}
 NGINX_DEV_KIT=${NGINX_DEV_KIT:-0.3.4}
-HTTPREDIS_VER=${HTTPREDIS_VER:-0.3.9}
+HTTPREDIS_VER=${HTTPREDIS_VER:-0.4.2}
 NGXECHO_VER=${NGXECHO_VER:-0.65}
 ZLIBNG_VER=${ZLIBNG_VER:-2.3.3}
 PCRE2_VER=${PCRE2_VER:-10.47}
@@ -532,7 +532,7 @@ case $OPTION in
 	# Download ngx_http_redis
 	if [[ $HTTPREDIS == 'y' ]]; then
 		cd /usr/local/src/nginx/modules || exit 1
-		wget https://people.freebsd.org/~osa/ngx_http_redis-${HTTPREDIS_VER}.tar.gz
+		wget -O "ngx_http_redis-${HTTPREDIS_VER}.tar.gz" "https://github.com/osokin/ngx_http_redis/archive/refs/tags/${HTTPREDIS_VER}.tar.gz" || exit 1
 		tar xaf ngx_http_redis-${HTTPREDIS_VER}.tar.gz
 	fi
 
