@@ -37,7 +37,7 @@ LIBRESSL_VER=${LIBRESSL_VER:-4.4.1}
 OPENSSL_VER=${OPENSSL_VER:-4.1.0}
 NPS_VER=${NPS_VER:-1.13.35.2}
 HEADERMOD_VER=${HEADERMOD_VER:-0.42}
-LIBMAXMINDDB_VER=${LIBMAXMINDDB_VER:-1.13.3}
+LIBMAXMINDDB_VER=${LIBMAXMINDDB_VER:-1.14.1}
 GEOIP2_VER=${GEOIP2_VER:-3.4}
 LUA_JIT_VER=${LUA_JIT_VER:-2.1-20260724}
 LUA_NGINX_VER=${LUA_NGINX_VER:-0.10.31}
@@ -328,7 +328,7 @@ case $OPTION in
 			fi
 		fi
 		apt-get update
-		apt-get install -y geoipupdate
+		apt-get install -y geoipupdate pkg-config
 	fi
 
 	if [[ $NGXWAF == 'y' ]]; then
