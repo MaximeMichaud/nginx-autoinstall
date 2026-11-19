@@ -6,6 +6,4 @@ updates:
     schedule:
       interval: "daily"
     assignees:
-      - "maximemichaud"
-    reviewers:
-      - "maximemichaud"
+      - "MaximeMichaud"
