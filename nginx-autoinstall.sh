@@ -36,7 +36,7 @@ NGINX_STABLE_VER=${NGINX_STABLE_VER:-1.30.7}
 LIBRESSL_VER=${LIBRESSL_VER:-4.4.1}
 OPENSSL_VER=${OPENSSL_VER:-4.1.0}
 NPS_VER=${NPS_VER:-1.13.35.2}
-HEADERMOD_VER=${HEADERMOD_VER:-0.40}
+HEADERMOD_VER=${HEADERMOD_VER:-0.42}
 LIBMAXMINDDB_VER=${LIBMAXMINDDB_VER:-1.13.3}
 GEOIP2_VER=${GEOIP2_VER:-3.4}
 LUA_JIT_VER=${LUA_JIT_VER:-2.1-20260724}
@@ -364,7 +364,7 @@ case $OPTION in
 	# More Headers
 	if [[ $HEADERMOD == 'y' ]]; then
 		cd /usr/local/src/nginx/modules || exit 1
-		git clone https://github.com/openresty/headers-more-nginx-module
+		git clone --depth 1 --branch "v${HEADERMOD_VER}" https://github.com/openresty/headers-more-nginx-module || exit 1
 	fi
 
 	# GeoIP
